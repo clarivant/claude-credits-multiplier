@@ -61,13 +61,13 @@ May 10 and May 14 are low-activity days at $83 and $78. These are the natural fl
 
 ## Week-over-week summary
 
-| Period | Total $ | Turns | Avg $/day | Credits multiplier |
-|---|---|---|---|---|
-| W0 Apr 25–30 (6d) | $5,148 | 23,977 | $858 | 1× (baseline) |
-| W1 May 1–7 (7d) | $2,490 | 24,689 | $356 | 2.4× |
-| W2 May 8–14 (7d) | $1,981 | 23,303 | $283 | **3.0×** |
-| W3 May 15–18 (4d) | $1,303 | 13,743 | $326 | 2.6× |
+| Period | Total $ | Turns | Avg $/day | Avg $/turn | $/day multiplier |
+|---|---|---|---|---|---|
+| W0 Apr 25–30 (6d) | $5,148 | 23,977 | $858 | $0.215 | 1× (baseline) |
+| W1 May 1–7 (7d) | $2,490 | 24,689 | $356 | $0.101 | 2.4× |
+| W2 May 8–14 (7d) | $1,981 | 23,303 | $283 | $0.085 | **3.0×** |
+| W3 May 15–18 (4d) | $1,303 | 13,743 | $326 | $0.095 | 2.6× |
 
-Multiplier = W0 avg $/day ÷ Wx avg $/day.
+Multiplier = W0 avg $/day ÷ Wx avg $/day. $/turn = total $ ÷ total turns.
 
 W2 is the stabilized state — all three layers running, no major incidents. W3 is slightly higher due to one heavy sprint day (May 16, $757) that skews the 4-day partial week.

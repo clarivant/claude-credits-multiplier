@@ -12,16 +12,27 @@ Get 2–3× more work from the same Claude Max subscription. Three layers that c
 
 **If you're on usage-based API billing:** the 3× doesn't directly apply. opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. Layers 2 and 3 add on top, but the compounding math is different. Run the telemetry scripts to measure your own ratio.
 
-| Period | What was running | Avg cost/day | Credits multiplier | In practice |
-|---|---|---|---|---|
-| W0 Apr 25–30 | Baseline — all Opus, no stack | $858/day | 1× | Ran out of quota mid-week |
-| W1 May 1–7 | opusplan + Context Mode wiring | $356/day | 2.4× | Full week, headroom |
-| W2 May 8–14 | All three layers stable | $283/day | **3.0×** | Three sprints per credit-week |
-| W3 May 15–18 | Steady state | $326/day | 2.6× | Running steady |
+| Period | What was running | Avg cost/day | Avg $/turn | $/day multiplier | In practice |
+|---|---|---|---|---|---|
+| W0 Apr 25–30 | Baseline — all Opus, no stack | $858/day | $0.215 | 1× | Ran out of quota mid-week |
+| W1 May 1–7 | opusplan + Context Mode wiring | $356/day | $0.108 | 2.4× | Full week, headroom |
+| W2 May 8–14 | All three layers stable | $283/day | $0.085 | **3.0×** | Three sprints per credit-week |
+| W3 May 15–18 | Steady state | $326/day | $0.095 | 2.6× | Running steady |
 
 Multiplier = W0 daily rate ÷ Wx daily rate. Same $200/mo plan. The drop from $858 → $283 means the same quota budget now covers 3× as many sprint-days.
 
+**Why the $/day (3.0×) and $/turn (2.5×) multipliers differ:** W2 had ~17% fewer turns/day than W0 (3,329 vs 3,996). Lower turn volume × lower cost-per-turn compounds to a higher $/day multiplier. Use $/turn as the cleaner signal for model routing efficiency; use $/day for quota planning.
+
 > These numbers are from one workload profile (heavy Claude Code usage across 5–8 projects simultaneously). Run the telemetry scripts against your own JSONL to measure your actual ratio — [see below](#measure-your-own-numbers).
+
+**The remaining Opus turns are doing heavier work.** The 15.8% of turns that still hit Opus are plan-mode turns — architecture decisions, cross-file reasoning, planning passes. They produce more output per turn than the pre-activation all-Opus average:
+
+| | Pre-activation (W0) | Post-activation (W2) |
+|---|---|---|
+| Opus turn share | 99% | 15.8% |
+| Avg output tokens / Opus turn | ~1,494 | ~1,838 |
+
+The output token count going up confirms that Opus is being reserved for the tasks it's actually good at, not burned on file edits and commit messages.
 
 ---
 
@@ -49,11 +60,14 @@ The split stabilizes at 15–25% Opus depending on how often you use Plan Mode. 
 **How to verify it's working:**
 
 ```bash
-# Clone this repo and run:
+# 1. Confirm opusplan is compiled into your Claude binary (5 matches = yes)
+strings $(which claude) | grep opusplan
+
+# 2. Validate the routing is actually firing on your sessions:
 ./scripts/opusplan-validation.sh --since 2026-05-01
 ```
 
-Output shows per-day Opus/Sonnet/Haiku split with a pass/fail verdict.
+Output shows per-day Opus/Sonnet/Haiku split with a pass/fail verdict. If `strings` returns 0 matches, your Claude version predates opusplan support — update first.
 
 ---
 
@@ -94,6 +108,8 @@ The compounding effect: at 96.1% session cache-hit rate, every token kept out of
 - `ctx_execute_file` — analyze large files without loading them into context (602 calls)
 - `ctx_fetch_and_index` — web fetches that stay out of context (43 calls)
 - `ctx_search` — retrieve only the relevant chunks back into context (352 calls)
+
+**On output quality:** Context Mode sandboxes tool results, not Claude's reasoning. The null hypothesis held: zero task failures or regressions observed across 58 sessions. The tradeoff is latency (FTS5 search adds ~100ms per retrieval), not quality. If you search precisely, you get relevant chunks back; if you search sloppily, the miss is visible and recoverable.
 
 **Enforce it with hooks** (add to `~/.claude/settings.json`):
 
@@ -166,6 +182,19 @@ opusplan is the biggest lever. You can get most of the benefit from Layer 1 alon
 
 ## Measure your own numbers
 
+### Methodology
+
+All numbers in this repo come from Claude Code's JSONL transcript files at `~/.claude/projects/<project-hash>/*.jsonl`. Each line is one API turn with token counts and model.
+
+```
+$/day = Σ (input_tokens × input_rate + output_tokens × output_rate) per day
+cache_hit_rate = cache_read_tokens / (input_tokens + cache_creation_tokens + cache_read_tokens)
+```
+
+Pricing constants (as of 2026-04-28): Opus $5/$25, Sonnet $3/$15, Haiku $1/$5 per MTok input/output. Update in `scripts/lib/pricing.sh` if rates change.
+
+### Run the scripts
+
 Three scripts that only depend on your Claude Code transcript JSONL (`~/.claude/projects/`):
 
 ```bash
@@ -188,7 +217,17 @@ Three scripts that only depend on your Claude Code transcript JSONL (`~/.claude/
 
 Save that number. Then activate opusplan. Run the same script a week later. The ratio is your Layer 1 multiplier.
 
-**Pricing constants** are in `scripts/lib/pricing.sh` — update if Anthropic changes rates. Current values: Opus $5/$25 input/output per MTok, Sonnet $3/$15, Haiku $1/$5 (as of 2026-04-28).
+### Opus% varies by project type
+
+opusplan routes per-session, not per-project. Architecture-heavy projects naturally hit Plan Mode more often:
+
+| Project type | Opus% (measured) |
+|---|---|
+| Active feature dev (complex domain) | ~15–20% |
+| Infra / config-heavy work | ~30–35% |
+| Pure content or translation | ~0–5% |
+
+Run `opusplan-validation.sh` on individual project directories to see your own split. If a project is consistently >50% Opus, check whether Plan Mode is being overused or if the task type warrants escalation.
 
 ---
 
