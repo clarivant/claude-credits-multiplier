@@ -1,6 +1,6 @@
 # claude-credits-multiplier
 
-Get 2–3× more work from the same Claude Max subscription. Three layers that compound: model routing, context sandboxing, and local LLM delegation. All measured on a real workload over 24 days.
+Get 3× more work from the same Claude Max subscription — your number will differ based on work mix. Four layers that compound: model routing, context sandboxing, semantic codebase search, and local LLM delegation. All measured on a real workload over 24 days.
 
 **Status:** in production since 2026-04-25. Snapshot maintained as the setup evolves — check commit history for what's changed.
 
@@ -10,20 +10,20 @@ Get 2–3× more work from the same Claude Max subscription. Three layers that c
 
 **If you're on Claude Max (flat-rate):** the invoice doesn't change. What changes is how much work fits before hitting the weekly quota. The 3× below is a quota multiplier — 3× more sprint-days per credit-week.
 
-**If you're on usage-based API billing:** the 3× doesn't directly apply. If you're currently defaulting to `claude-opus-*`, opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. If you're already on Sonnet by default, Layer 1 has no effect — Layers 2 and 3 still apply. Run the telemetry scripts to measure your own ratio.
+**If you're on usage-based API billing:** the 3× doesn't directly apply. If you're currently defaulting to `claude-opus-*`, opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. If you're already on Sonnet by default, Layer 1 has no effect — Layers 2, 3, and 4 still apply. Run the telemetry scripts to measure your own ratio.
 
 | Period | What was running | Avg cost/day | Avg $/turn | $/day multiplier | In practice |
 |---|---|---|---|---|---|
 | W0 Apr 25–30 | Baseline — all Opus, no stack | $858/day | $0.215 | 1× | Ran out of quota mid-week |
 | W1 May 1–7 | opusplan + Context Mode wiring | $356/day | $0.108 | 2.4× | Full week, headroom |
-| W2 May 8–14 | All three layers stable | $283/day | $0.085 | **3.0×** | Three sprints per credit-week |
+| W2 May 8–14 | All four layers stable | $283/day | $0.090 | **3.0×** | Three sprints per credit-week |
 | W3 May 15–18 | Steady state | $326/day | $0.095 | 2.6× | Running steady |
 
 Multiplier = W0 daily rate ÷ Wx daily rate. Same $200/mo plan. The drop from $858 → $283 means the same quota budget now covers 3× as many sprint-days.
 
 **On the baseline:** W0 was a real production week, not a low-activity cherry-pick. Turn volumes across all four weeks were within 15% of each other (W0: 24k, W1: 25k, W2: 23k, W3: 14k partial). The cost difference is Opus% dropping from 99% to 15.8%, not the workload getting lighter.
 
-**Why the $/day (3.0×) and $/turn (2.5×) multipliers differ:** W2 had ~17% fewer turns/day than W0 (3,329 vs 3,996). Lower turn volume × lower cost-per-turn compounds to a higher $/day multiplier. Use $/turn as the cleaner signal for model routing efficiency; use $/day for quota planning.
+**Why the $/day (3.0×) and $/turn (2.4×) multipliers differ:** W2 had ~21% fewer turns/day than W0 (3,164 vs 3,996). Lower turn volume × lower cost-per-turn compounds to a higher $/day multiplier. Use $/turn as the cleaner signal for model routing efficiency; use $/day for quota planning.
 
 > These numbers are from one workload profile (heavy Claude Code usage across 5–8 projects simultaneously). Run the telemetry scripts against your own JSONL to measure your actual ratio — [see below](#measure-your-own-numbers).
 
@@ -38,7 +38,7 @@ The output token count going up confirms that Opus is being reserved for the tas
 
 ---
 
-## The three layers
+## The four layers
 
 ### Layer 1 — opusplan: right model for the task
 
@@ -71,7 +71,7 @@ strings $(which claude) | grep opusplan
 
 Output shows per-day Opus/Sonnet/Haiku split with a pass/fail verdict. If `strings` returns 0 matches, your Claude version predates opusplan support — update first.
 
-**Stability:** `opusplan` is not in Anthropic's public API docs — it's an internal routing flag compiled into the Claude Code binary. It has been stable since at least 2026-04-25 and survived multiple Claude Code updates in production. Treat it as: works today, verify the `strings` check after any Claude Code update. If it stops working, the fallback is the `/model` command or `Shift+Tab` to toggle Plan Mode manually.
+**Stability:** `opusplan` is [officially documented](https://code.claude.com/docs/en/model-config) but doesn't appear in the standard `/model` picker, which is why most practitioners describe it as "hidden." It has been stable since at least 2026-04-25 and survived multiple Claude Code updates in production. Treat it as: works today, verify the `strings` check after any Claude Code update. If it stops working, the fallback is the `/model` command or `Shift+Tab` to toggle Plan Mode manually.
 
 ---
 
@@ -132,20 +132,27 @@ The compounding effect: at 96.1% session cache-hit rate, every token kept out of
 
 ---
 
-### Layer 3 — SocratiCode + local LLM delegation
+### Layer 3 — SocratiCode: semantic codebase search
 
-**What:** Two tools that keep bounded work off Claude entirely.
-
-**[SocratiCode](https://github.com/giancarloerra/socraticode)** by [@giancarloerra](https://github.com/giancarloerra) — local semantic codebase search. Instead of loading files into context to answer "where is X used?", SocratiCode runs a hybrid semantic + BM25 search over a local index. Zero Claude tokens for codebase exploration.
+**What:** Local semantic codebase search. Instead of loading files into context to answer "where is X used?", [SocratiCode](https://github.com/giancarloerra/socraticode) by [@giancarloerra](https://github.com/giancarloerra) runs a hybrid semantic + BM25 search over a local index and returns ~5 ranked chunks (~500 lines). Zero Claude tokens for codebase exploration.
 
 ```bash
 # Install via MCP
 npx -y socraticode
 ```
 
-Reach for `mcp__socraticode__codebase_search` before `grep -r` or multi-file reads. Primary queries: "find all endpoints missing dep X", "where is config Y read", "callers of fn Z". Typical savings: 3–5 file reads per query avoided.
+Reach for `mcp__socraticode__codebase_search` before `grep -r` or multi-file reads. Primary queries: "find all endpoints missing dep X", "where is config Y read", "callers of fn Z".
 
-**Local LLM delegation** — route bounded tasks (commit messages, test stubs, format conversion, translations, boilerplate) to a local model instead of Claude. The key is `code_task_files`: pass the file path, not the file content.
+**Measured usage (May 2 – May 18, post-fix):**
+
+- 711 `codebase_search` calls (41.8/day average)
+- 4–7/day before the fix; **7.8× lift** after fix (CLAUDE.md tool-name correction + base64 vendor patch + `socraticode-nudge.sh` PreToolUse hook on grep/rg/find)
+- 29.4M indexing tokens to local GPU — never touched Claude
+- No per-call ctx_stats equivalent; savings are estimated downstream via the same cache-read multiplier math as Layer 2
+
+### Layer 4 — Local LLM delegation
+
+**What:** Route bounded tasks (commit messages, test stubs, format conversion, translations, boilerplate) to a local model instead of Claude. The key is `code_task_files`: pass the file path, not the file content.
 
 | Method | Tokens to Claude |
 |---|---|
@@ -170,17 +177,20 @@ The local model writes to disk. Claude gets the output. The file never enters Cl
 Each layer hits a different part of the cost:
 
 ```
-opusplan:       ~60–70% of total savings
+opusplan:       ~94% of the $/day reduction
                 (Opus → Sonnet routing, every non-plan turn)
 
-Context Mode:   ~20–25% and growing
-                (tokens kept out of context never get re-read)
+Context Mode:   compounds via cache-read multiplier
+                (8.1M tokens kept out × ~M/2 reads avoided per session)
 
-Local LLM:      ~8–12%
-                (bounded tasks routed off Claude entirely)
+SocratiCode:    same cache-read mechanism as Context Mode
+                (711 codebase_search calls replacing grep+Read sequences)
+
+Local LLM:      per-call ratio (~3% of $/day reduction in absolute terms)
+                (bounded tasks routed off Claude entirely; 97% per-call savings)
 ```
 
-opusplan is the biggest lever. You can get most of the benefit from Layer 1 alone. Layers 2 and 3 compound on top.
+opusplan is the biggest lever. You can get most of the benefit from Layer 1 alone. Layers 2, 3, and 4 compound on top.
 
 ---
 
@@ -253,7 +263,7 @@ Honest accounting of failures:
 
 **opusplan false negatives** — `opusplan-validation.sh` initially produced "NOT effective" verdicts because it averaged over all days including the all-Opus baseline. Fix: scope the verdict to post-activation dates only.
 
-**Thinking mode on the local 27B** — Qwen3-14B emits zero output (all reasoning tokens, no content) on Makefile/config/multi-target tasks. Observed in production. Escalation rule: 0 emitted tokens → retry with the 27B model, do NOT fall back to writing it yourself.
+**Thinking mode on the local 14B drafter** — Qwen3-14B emits zero output (all reasoning tokens, no content) on Makefile/config/multi-target tasks. Observed in production. Escalation rule: 0 emitted tokens → retry with the 27B architect, do NOT fall back to writing it yourself.
 
 ---
 
@@ -263,7 +273,7 @@ Honest accounting of failures:
 - For Layer 1: none beyond setting an env var
 - For Layer 2: Node 18+, `npx` ([context-mode](https://github.com/mksglu/context-mode))
 - For Layer 3 (SocratiCode): Docker ([socraticode](https://github.com/giancarloerra/socraticode))
-- For Layer 3 (local LLM): GPU hardware + [llama.cpp](https://github.com/ggerganov/llama.cpp) or [Ollama](https://ollama.ai)
+- For Layer 4 (local LLM): GPU hardware + [llama.cpp](https://github.com/ggerganov/llama.cpp) or [Ollama](https://ollama.ai)
 - Telemetry scripts: `bash`, `python3`, `jq`
 
 ---
@@ -295,6 +305,6 @@ claude-credits-multiplier/
 
 ## About
 
-Built and maintained by [Arturo Camargo](https://clarivant.co) — founder at [Clarivant](https://clarivant.co), a consulting firm that runs AI-augmented workflows in production. The narrative companion to this repo — what this setup actually changed about how a small team works — is at [clarivant.co/insights](https://clarivant.co/insights).
+Built and maintained by [Arturo Cárdenas](https://clarivant.co) — founder at [Clarivant](https://clarivant.co), a consulting firm that runs AI-augmented workflows in production. The narrative companion to this repo — what this setup actually changed about how a small team works — is at [clarivant.co/insights](https://clarivant.co/insights).
 
 This repo is the receipts. The site is the story.
