@@ -70,4 +70,6 @@ May 10 and May 14 are low-activity days at $83 and $78. These are the natural fl
 
 Multiplier = W0 avg $/day ÷ Wx avg $/day. $/turn = total $ ÷ total turns.
 
+**Note on turn counts:** Weekly totals are from the JSONL scanner using calendar-day boundaries. Sessions that span midnight may be split differently from day-by-day rows, so weekly turn totals and the sum of daily rows can differ by ~1–2%. The cost figures are unaffected.
+
 W2 is the stabilized state — all three layers running, no major incidents. W3 is slightly higher due to one heavy sprint day (May 16, $757) that skews the 4-day partial week.

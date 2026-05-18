@@ -10,7 +10,7 @@ Get 2–3× more work from the same Claude Max subscription. Three layers that c
 
 **If you're on Claude Max (flat-rate):** the invoice doesn't change. What changes is how much work fits before hitting the weekly quota. The 3× below is a quota multiplier — 3× more sprint-days per credit-week.
 
-**If you're on usage-based API billing:** the 3× doesn't directly apply. opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. Layers 2 and 3 add on top, but the compounding math is different. Run the telemetry scripts to measure your own ratio.
+**If you're on usage-based API billing:** the 3× doesn't directly apply. If you're currently defaulting to `claude-opus-*`, opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. If you're already on Sonnet by default, Layer 1 has no effect — Layers 2 and 3 still apply. Run the telemetry scripts to measure your own ratio.
 
 | Period | What was running | Avg cost/day | Avg $/turn | $/day multiplier | In practice |
 |---|---|---|---|---|---|
@@ -20,6 +20,8 @@ Get 2–3× more work from the same Claude Max subscription. Three layers that c
 | W3 May 15–18 | Steady state | $326/day | $0.095 | 2.6× | Running steady |
 
 Multiplier = W0 daily rate ÷ Wx daily rate. Same $200/mo plan. The drop from $858 → $283 means the same quota budget now covers 3× as many sprint-days.
+
+**On the baseline:** W0 was a real production week, not a low-activity cherry-pick. Turn volumes across all four weeks were within 15% of each other (W0: 24k, W1: 25k, W2: 23k, W3: 14k partial). The cost difference is Opus% dropping from 99% to 15.8%, not the workload getting lighter.
 
 **Why the $/day (3.0×) and $/turn (2.5×) multipliers differ:** W2 had ~17% fewer turns/day than W0 (3,329 vs 3,996). Lower turn volume × lower cost-per-turn compounds to a higher $/day multiplier. Use $/turn as the cleaner signal for model routing efficiency; use $/day for quota planning.
 
@@ -49,13 +51,13 @@ export ANTHROPIC_MODEL=opusplan
 
 **Result (measured):**
 
-| Before | After |
+| Before (W0) | After (W1+) |
 |---|---|
 | 99% Opus turns | 15.8% Opus turns |
-| $0.2568/turn avg | $0.1010/turn avg |
+| $0.215/turn avg | $0.101/turn avg |
 | Quota exhausted mid-week | Full week with headroom |
 
-The split stabilizes at 15–25% Opus depending on how often you use Plan Mode. Sonnet handles the vast majority of implementation, debugging, and file work without any quality loss on bounded tasks.
+The split stabilizes at 15–25% Opus depending on how often you use Plan Mode. Sonnet handles implementation, debugging, and file work without observable quality regression — this is observational across 24 days of production use, not a formal benchmark.
 
 **How to verify it's working:**
 
@@ -68,6 +70,8 @@ strings $(which claude) | grep opusplan
 ```
 
 Output shows per-day Opus/Sonnet/Haiku split with a pass/fail verdict. If `strings` returns 0 matches, your Claude version predates opusplan support — update first.
+
+**Stability:** `opusplan` is not in Anthropic's public API docs — it's an internal routing flag compiled into the Claude Code binary. It has been stable since at least 2026-04-25 and survived multiple Claude Code updates in production. Treat it as: works today, verify the `strings` check after any Claude Code update. If it stops working, the fallback is the `/model` command or `Shift+Tab` to toggle Plan Mode manually.
 
 ---
 
@@ -97,10 +101,10 @@ Output shows per-day Opus/Sonnet/Haiku split with a pass/fail verdict. If `strin
 | Sessions | 58 |
 | Total `ctx_*` calls | 2,145 |
 | Tokens kept out of context | **8,109,886** |
-| Direct savings (Opus input rate) | $121.65 |
+| Direct savings (ctx_stats reported) | $121.65 |
 | Single web fetch reduction | 97.9% |
 
-The compounding effect: at 96.1% session cache-hit rate, every token kept out of context early doesn't get re-read on every subsequent turn. The 8.1M number understates the real impact.
+The compounding effect: at 96.1% session cache-hit rate, every token kept out of context early also avoids being re-read on every subsequent turn of that session. The 8.1M figure is the raw count of tokens never loaded; the dollar figure reflects what `ctx_stats` reports using its internal blended rate.
 
 **Key tools:**
 
@@ -156,7 +160,7 @@ The local model writes to disk. Claude gets the output. The file never enters Cl
 **Session totals (May 1–18, measured):**
 
 - 890 chat calls to local models (architect-27B + drafter-14B)
-- 91% offload ratio (local savings / total work)
+- 91% offload ratio (tokens handled by local models / tokens that would have gone to Claude for the same delegatable tasks)
 - 0 errors, 0 fallbacks
 
 ---
