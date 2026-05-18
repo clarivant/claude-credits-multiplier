@@ -2,13 +2,15 @@
 
 Get 2–3× more work from the same Claude Max subscription. Three layers that compound: model routing, context sandboxing, and local LLM delegation. All measured on a real workload over 24 days.
 
-**Status:** in production since 2026-04-25.
+**Status:** in production since 2026-04-25. Snapshot maintained as the setup evolves — check commit history for what's changed.
 
 ---
 
 ## The result first
 
-On Claude Max ($200/mo flat-rate), the invoice doesn't change. What changes is how much work fits before hitting the weekly quota.
+**If you're on Claude Max (flat-rate):** the invoice doesn't change. What changes is how much work fits before hitting the weekly quota. The 3× below is a quota multiplier — 3× more sprint-days per credit-week.
+
+**If you're on usage-based API billing:** the 3× doesn't directly apply. opusplan alone (Layer 1) gets you ~50–60% cost reduction by routing most turns from Opus to Sonnet. Layers 2 and 3 add on top, but the compounding math is different. Run the telemetry scripts to measure your own ratio.
 
 | Period | What was running | Avg cost/day | Credits multiplier | In practice |
 |---|---|---|---|---|
@@ -133,6 +135,8 @@ Reach for `mcp__socraticode__codebase_search` before `grep -r` or multi-file rea
 
 The local model writes to disk. Claude gets the output. The file never enters Claude's context.
 
+> **Caveat:** The 97% savings is Claude tokens — it requires a non-Claude executor (local GPU model, GPT-4o-mini, etc.). Without one, you're shifting the bill to a different provider, not eliminating it. The methodology generalizes to any cheap local-or-remote executor; the number only holds when Claude is fully off the path.
+
 **Session totals (May 1–18, measured):**
 
 - 890 chat calls to local models (architect-27B + drafter-14B)
@@ -243,3 +247,11 @@ claude-credits-multiplier/
 - **[SocratiCode](https://github.com/giancarloerra/socraticode)** — [@giancarloerra](https://github.com/giancarloerra) — local semantic codebase search
 - **[llama.cpp](https://github.com/ggerganov/llama.cpp)** — local inference backend
 - **[LiteLLM](https://github.com/BerriAI/litellm)** — proxy and routing layer
+
+---
+
+## About
+
+Built and maintained by [Arturo Camargo](https://clarivant.co) — founder at [Clarivant](https://clarivant.co), a consulting firm that runs AI-augmented workflows in production. The narrative companion to this repo — what this setup actually changed about how a small team works — is at [clarivant.co/insights](https://clarivant.co/insights).
+
+This repo is the receipts. The site is the story.
