@@ -168,7 +168,13 @@ The local model writes to disk. Claude gets the output. The file never enters Cl
 
 - 890 chat calls to local models (architect-27B + drafter-14B)
 - 91% offload ratio (tokens handled by local models / tokens that would have gone to Claude for the same delegatable tasks)
-- 0 errors, 0 fallbacks
+- 0 errors, 0 fallbacks — ⚠ *the fallbacks half of this claim was retired 2026-08-18: the telemetry field behind it was structurally broken (see [What didn't work](#what-didnt-work) and the [August addendum](docs/2026-08-qwen38-upgrade.md)). "0 errors" stands.*
+
+**August 2026 update:** the local architect was upgraded to Qwen3.8-27B with MTP speculative
+decoding — **~2× long-output decode** (62–71 tok/s vs ~33), evaluated and cut over in 27 hours
+with full receipts: **[docs/2026-08-qwen38-upgrade.md](docs/2026-08-qwen38-upgrade.md)**. It
+includes the ~1 MB GGUF-header trick that answers "will this model load on my build" before you
+download 19 GB.
 
 ---
 
@@ -265,6 +271,8 @@ Honest accounting of failures:
 
 **Thinking mode on the local 14B drafter** — Qwen3-14B emits zero output (all reasoning tokens, no content) on Makefile/config/multi-target tasks. Observed in production. Escalation rule: 0 emitted tokens → retry with the 27B architect, do NOT fall back to writing it yourself.
 
+**`fallback_used` telemetry was fiction (found 2026-08-18)** — the JSONL logger read metadata from `kwargs["metadata"]`, but this LiteLLM version delivers it at `kwargs["litellm_params"]["metadata"]`. The field could never be `true`, so every "0 fallbacks" figure ever published from that log was instrumentation, not evidence. Same audit found ~90% of "delegation" traffic was actually scheduled automation, indistinguishable from interactive use — fixed by having callers tag requests with a `source` field the logger records. Full story in the [August addendum](docs/2026-08-qwen38-upgrade.md).
+
 ---
 
 ## Requirements
@@ -289,7 +297,8 @@ claude-credits-multiplier/
 │   └── lib/
 │       └── pricing.sh           # Anthropic pricing constants (single source of truth)
 └── docs/
-    └── daily-log.md             # complete day-by-day record Apr 25 → May 18
+    ├── daily-log.md             # complete day-by-day record Apr 25 → May 18
+    └── 2026-08-qwen38-upgrade.md  # addendum: Qwen3.8 + MTP upgrade, 2× decode, receipts
 ```
 
 ---
