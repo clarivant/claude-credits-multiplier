@@ -151,6 +151,25 @@ large-prompt gate in the harness.
 Two lessons, both generalizable: **validate at the workload sizes you claim, not the sizes that
 are easy to bench** — and a day-one benchmark is a hypothesis until a day-two workload confirms it.
 
+## The routing audit's bonus find: a 16-week-old "model limitation" that wasn't
+
+The same day-two audit re-tested the session-facing delegation path end-to-end and reproduced a
+failure documented since April: the 14B drafter "emits zero output — all reasoning tokens, no
+content" on short bounded tasks. It had its own escalation workaround and had long since
+calcified into lore as a model property.
+
+It was a config gap. When the architect route got `enable_thinking: false` in April (the ~100×
+completion-token fix), the drafter route never did — so the drafter spent every output token on
+its reasoning pass, and any call with a tight `max_tokens` came back empty. Verified both ways
+on a 60-token budget: thinking ON → empty content; thinking OFF → a clean 17-token result. One
+config block, proxy restart, and the nightly 15-fixture prompt-injection regression re-run
+against the new behavior: still 15/15 — the hardening never depended on the reasoning pass.
+
+The transferable lesson: **when a workaround calcifies into an operating rule, periodically
+re-test its premise.** Four months of escalations, routing-rule caveats, and "the 14B can't do
+X" folklore traced to one missing line — and it took a deliberate re-test of a path everyone
+"knew" was broken to find it.
+
 ## The bottom line
 
 | | Before (Aug 17) | After (Aug 19) |
