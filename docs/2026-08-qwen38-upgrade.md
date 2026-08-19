@@ -123,16 +123,45 @@ a publishable result too:
 
 Both fixes are the same lesson: **tag and verify at the source, or your dashboard is fiction.**
 
+## Day-two correction: MTP shelved, context doubled instead
+
+This repo's premise is receipts, so here is the next day's finding, unedited: **MTP's 2× win
+holds only below ~3-4K prompt tokens.** Large-prompt validation — which the original gate set
+lacked (`pp512` benches 512-token prompts; the golden set was all small-prompt/large-output) —
+found speculative decoding *collapses at depth*: decode 12-17 tok/s and prefill 900→130 tok/s
+on 30-47K-token prompts. Measured crossover:
+
+| Prompt size | MTP decode | no-MTP decode |
+|---|---|---|
+| 550 tok | 44.5 tok/s | ~35 |
+| 2.1K | 45.0 | ~35 |
+| 3.7K | 35.5 (break-even) | ~35 |
+| 5.8K | 26.4 | — |
+| 30K | 17.3 | 31.5 |
+| 47K | 12.3 | ~29 |
+
+The regression ran in production for one day before a validation pass caught it. The fix chosen:
+**drop MTP, double the context window to 64K** — hybrid attention makes deep KV cheap (+1.3 GB
+for +32K tokens; total VRAM actually *fell* 1.3 GB with the draft head gone), and the
+documented 39K/47K-token hard-failure class now serves in ~30-54 seconds. For a delegation
+stack, servable-large-prompts beats faster-short-outputs. MTP's draft heads stay on disk,
+pinned; it gets re-evaluated when llama.cpp's days-old support matures — this time with a
+large-prompt gate in the harness.
+
+Two lessons, both generalizable: **validate at the workload sizes you claim, not the sizes that
+are easy to bench** — and a day-one benchmark is a hypothesis until a day-two workload confirms it.
+
 ## The bottom line
 
 | | Before (Aug 17) | After (Aug 19) |
 |---|---|---|
 | Architect model | Qwen3.6-27B Q5 | Qwen3.8-27B Q4 |
 | llama.cpp | Apr 25 build | b10502 (Aug 19) |
-| Long-output decode | ~32–34 tok/s | **62–71 tok/s** |
+| Long-output decode | ~32–34 tok/s | **62–71 tok/s with MTP (short prompts only — see day-two correction)**; 31-37 tok/s in the final 64K config |
 | Trivial-prompt completion | 2 tokens | 2 tokens (the number that mattered most, unchanged) |
 | Injection regression | 15/15 | 15/15 |
-| Rollback | — | model: 1 line · MTP: 4 lines · runtime: reinstall preserved old tree |
+| Max servable prompt | 32K tokens (hard error above) | **64K** — the real prize |
+| Rollback | — | model: 1 line · MTP: 4 lines (exercised day two) · runtime: reinstall preserved old tree |
 
 Local-first isn't just cheaper — it's *faster to adopt frontier open source*. Five days after
 Qwen published the weights, they were serving production traffic on a two-GPU homelab at 2× the
