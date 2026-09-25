@@ -19,6 +19,8 @@ Get 3× more work from the same Claude Max subscription — your number will dif
 | W2 May 8–14 | All four layers stable | $283/day | $0.090 | **3.0×** | Three sprints per credit-week |
 | W3 May 15–18 | Steady state | $326/day | $0.095 | 2.6× | Running steady |
 
+> **Correction (September 2026):** the May numbers in the table above were produced with the original counting method, which summed every transcript line (Claude Code writes ~2 lines per message), skipped subagent transcripts, and priced all cache writes at the 5-minute rate. The scripts now fix all three (see [Counting method](#counting-method-corrected-september-2026)). On a 4-week September window the old method reported about 63% more than the corrected one ($15.6K vs $9.6K). Transcripts before mid-August no longer exist, so the May weeks cannot be recomputed; treat the absolute $/day figures as inflated and the multipliers as indicative, not exact. Full write-up: [September 2026 update](https://clarivant.ai/en/insights/claude-credits-multiplier#september-2026-update).
+
 Multiplier = W0 daily rate ÷ Wx daily rate. Same $200/mo plan. The drop from $858 → $283 means the same quota budget now covers 3× as many sprint-days.
 
 **On the baseline:** W0 was a real production week, not a low-activity cherry-pick. Turn volumes across all four weeks were within 15% of each other (W0: 24k, W1: 25k, W2: 23k, W3: 14k partial). The cost difference is Opus% dropping from 99% to 15.8%, not the workload getting lighter.
@@ -213,6 +215,16 @@ cache_hit_rate = cache_read_tokens / (input_tokens + cache_creation_tokens + cac
 
 Pricing constants (as of 2026-04-28): Opus $5/$25, Sonnet $3/$15, Haiku $1/$5 per MTok input/output. Update in `scripts/lib/pricing.sh` if rates change.
 
+### Counting method (corrected September 2026)
+
+`scripts/lib/transcripts.py` is the shared reader. Against the original scripts it:
+
+1. **Dedupes by message.** One record per `(message.id, requestId)`; the copy with the most output tokens wins. The old loop summed every line, so cost and "turns" were roughly 2x too high.
+2. **Includes subagent transcripts** (`<project>/<session>/subagents/**`). The old glob only read top-level files, so subagent fan-out (mostly Sonnet) was missing and the Opus share looked higher than it was.
+3. **Prices cache writes by tier.** 5-minute writes at 1.25x input, 1-hour writes at 2.00x (Claude Code picks the tier per request; about half of write tokens were 1-hour in our data).
+
+Sanity check: deduped cache-read tokens matched `ccusage` within 1.5% on four full days. Run `cost-per-day.sh --legacy` to reproduce the old method exactly (no dedupe, no subagents, flat 1.25x) when comparing against old baselines. Days are UTC by default. Lockout days (weekly limit hit) contain only zero-usage error rows and are printed as such instead of disappearing.
+
 ### Run the scripts
 
 Three scripts that only depend on your Claude Code transcript JSONL (`~/.claude/projects/`):
@@ -295,7 +307,8 @@ claude-credits-multiplier/
 │   ├── opusplan-validation.sh   # Opus/Sonnet split per day
 │   ├── ctx-mode-lifetime.sh     # Context Mode lifetime token savings
 │   └── lib/
-│       └── pricing.sh           # Anthropic pricing constants (single source of truth)
+│       ├── pricing.sh           # Anthropic pricing constants (single source of truth)
+│       └── transcripts.py       # shared transcript reader (dedupe, subagents, cache tiers)
 └── docs/
     ├── daily-log.md             # complete day-by-day record Apr 25 → May 18
     └── 2026-08-qwen38-upgrade.md  # addendum: Qwen3.8 + MTP upgrade, 2× decode, receipts

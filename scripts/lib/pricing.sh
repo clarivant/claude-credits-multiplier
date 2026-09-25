@@ -8,6 +8,14 @@
 # Current rates used here (sourced live from Anthropic pricing page).
 
 # $ per 1M tokens
+# Re-verified 2026-08-19 against the Claude 5 family (claude-api skill, cached 2026-06-24):
+#   Fable 5 $10/$50 (NEW TIER — was silently priced as Sonnet before 2026-08-19 fix);
+#   Opus 5 / 4.8 / 4.7 unchanged at $5/$25; Sonnet 5 list $3/$15 — intro pricing $2/$10
+#   runs through 2026-08-31; we keep LIST price for cross-period comparability with the
+#   Apr/May baselines (all W0-W3 numbers used list). Flip SONNET_* to 2.00/10.00 only if
+#   you want invoice-realistic numbers during the intro window, and say so in the output.
+FABLE_INPUT_PER_M=10.00
+FABLE_OUTPUT_PER_M=50.00
 OPUS_INPUT_PER_M=5.00
 OPUS_OUTPUT_PER_M=25.00
 SONNET_INPUT_PER_M=3.00
@@ -20,6 +28,9 @@ HAIKU_OUTPUT_PER_M=5.00
 # 1-hour cache write:   2.00x base input price
 # Cache read (hit):     0.10x base input price
 CACHE_WRITE_MULT=1.25
+# used by lib/transcripts.py (added 2026-09-19). Measured 2026-09-19: ~52% of cache-write tokens
+# are 1h tier (per-project share ranges ~36-93%); Claude Code chooses the tier per request.
+CACHE_WRITE_1H_MULT=2.00
 CACHE_READ_MULT=0.10
 
 # Subscription plan context (used for the plan-equivalent footer in reports)
